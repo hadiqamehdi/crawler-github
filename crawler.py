@@ -1,5 +1,6 @@
 import base64
 import re
+from github_client import run_query  # Add this import
 
 def extract_numeric_id(base64_id):
     """Extract numeric ID from GitHub's Base64-encoded ID string."""
@@ -43,7 +44,7 @@ def crawl_repos(limit=1000):
         }}
         """
 
-        data = run_query(query)
+        data = run_query(query)  # Now this function is available
         edges = data["data"]["search"]["edges"]
 
         for e in edges:
