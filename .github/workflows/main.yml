@@ -1,12 +1,31 @@
 name: Crawl GitHub Repositories
+
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
   schedule:
     - cron: '0 0 * * *'  # Daily at midnight UTC
 
 jobs:
   crawl:
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: github_crawler
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/github_crawler"
     
     steps:
     - uses: actions/checkout@v4
@@ -16,20 +35,43 @@ jobs:
       with:
         python-version: '3.11'
     
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
+        sudo apt-get update
+        sudo apt-get install -y libpq-dev python3-dev gcc
+    
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip
         pip install -r requirements.txt
     
+    - name: Create tables
+      run: |
+        python -c "
+        from db import setup_db
+        setup_db()
+        print('Database tables created successfully')
+        "
+    
     - name: Run crawler
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
       run: python main.py
     
-    - name: Upload results (if you're generating output)
-      uses: actions/upload-artifact@v4  # Use v4, not v3!
-      if: always()
+    - name: Export data to CSV
+      run: |
+        python -c "
+        from sqlalchemy import create_engine
+        import pandas as pd
+        import os
+        
+        engine = create_engine(os.environ['DATABASE_URL'])
+        df = pd.read_sql_table('repositories', engine)
+        df.to_csv('repositories.csv', index=False)
+        print(f'Exported {len(df)} records to CSV')
+        "
+    
+    - name: Upload CSV results
+      uses: actions/upload-artifact@v4
       with:
-        name: crawl-results
-        path: output/  # or whatever path your output is in
+        name: github-repositories
+        path: repositories.csv
         retention-days: 7
