@@ -23,14 +23,30 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Initialize database
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/github_db
+        run: python -c "from db import setup_db; setup_db(); print('Database initialized')"
 
       - name: Run crawler
         env:
@@ -39,10 +55,12 @@ jobs:
         run: python main.py
 
       - name: Dump database
-        run: pg_dump -U postgres -d github_db > data.sql
+        run: |
+          PGPASSWORD=postgres pg_dump -h localhost -U postgres -d github_db > data.sql
+          echo "Database dump created ($(wc -l < data.sql) lines)"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: github-stars
           path: data.sql
