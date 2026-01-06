@@ -33,7 +33,7 @@ def crawl_repos(limit=1000):
         for e in edges:
             r = e["node"]
             repos.append({
-                "repo_id": int(r["id"]),
+                "repo_id": r["id"],  # Keep as string (Base64)
                 "name": r["name"],
                 "owner": r["owner"]["login"],
                 "stars": r["stargazerCount"],
